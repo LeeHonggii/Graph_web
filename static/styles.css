@@ -1,11 +1,12 @@
 :root {
     --dark-bg: #1a1a1a;
-    --dark-brown: #2d2420;
-    --lighter-brown: #3d332e;
+    --dark-red: #2d1820;
+    --lighter-red: #3d2228;
     --text-color: #e0e0e0;
     --input-bg: #2a2a2a;
-    --button-hover: #4d3d35;
-    --border-brown: #3d332e;
+    --button-hover: #4d2830;
+    --border-red: #3d2228;
+    --accent-red: #8B0000;
 }
 
 * {
@@ -29,27 +30,38 @@ body {
 .left-panel {
     width: 300px;
     background-color: var(--dark-bg);
-    padding: 0;  /* 패딩 제거 */
-    border: 2px solid var(--border-brown);
+    padding: 0;
+    border: 2px solid var(--border-red);
     border-radius: 8px;
     margin: 10px;
 }
 
 h2 {
-    margin: 0;  /* 마진 제거 */
+    margin: 0;
     color: var(--text-color);
-    background-color: var(--dark-brown);
+    background-color: var(--dark-red);
     padding: 15px 20px;
     border-top-left-radius: 6px;
     border-top-right-radius: 6px;
 }
 
-.graph-options {
+.processing-options {
     background-color: var(--dark-bg);
     padding: 20px;
     display: flex;
     flex-direction: column;
     gap: 15px;
+}
+
+.option-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.option-group label {
+    color: var(--text-color);
+    font-size: 0.9rem;
 }
 
 .right-panel {
@@ -64,7 +76,7 @@ h2 {
     padding: 10px;
     background-color: var(--input-bg);
     color: var(--text-color);
-    border: 1px solid var(--border-brown);
+    border: 1px solid var(--border-red);
     border-radius: 4px;
     width: 100%;
 }
@@ -73,7 +85,7 @@ h2 {
     padding: 10px 20px;
     background-color: var(--input-bg);
     color: var(--text-color);
-    border: 1px solid var(--border-brown);
+    border: 1px solid var(--border-red);
     border-radius: 4px;
     cursor: pointer;
     transition: all 0.3s ease;
@@ -81,7 +93,57 @@ h2 {
 
 .dark-button:hover {
     background-color: var(--button-hover);
-    border-color: var(--dark-brown);
+    border-color: var(--dark-red);
+}
+
+/* 청크 사이즈 관련 스타일 */
+.chunk-options {
+    margin-top: 1rem;
+}
+
+.chunk-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.chunk-btn {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--border-red);
+    background: var(--input-bg);
+    color: var(--text-color);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.chunk-btn:hover {
+    background: var(--button-hover);
+}
+
+.chunk-btn.active {
+    background: var(--accent-red);
+    border-color: #6B0000;
+}
+
+.custom-chunk {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.dark-input {
+    background: var(--input-bg);
+    border: 1px solid var(--border-red);
+    color: var(--text-color);
+    padding: 0.5rem;
+    border-radius: 4px;
+    width: 150px;
+}
+
+.unit {
+    color: #999;
 }
 
 .chat-container {
@@ -96,7 +158,7 @@ h2 {
     overflow-y: auto;
     padding: 20px;
     background-color: var(--dark-bg);
-    border: 1px solid var(--border-brown);
+    border: 1px solid var(--border-red);
     border-radius: 4px;
     margin-bottom: 20px;
     display: flex;
@@ -112,7 +174,7 @@ h2 {
 }
 
 .user-message {
-    background-color: var(--dark-brown);
+    background-color: var(--dark-red);
     align-self: flex-end;
     margin-left: 20%;
 }
@@ -121,7 +183,7 @@ h2 {
     background-color: var(--input-bg);
     align-self: flex-start;
     margin-right: 20%;
-    border: 1px solid var(--border-brown);
+    border: 1px solid var(--border-red);
 }
 
 .chat-input-container {
@@ -134,7 +196,7 @@ h2 {
     padding: 12px;
     background-color: var(--input-bg);
     color: var(--text-color);
-    border: 1px solid var(--border-brown);
+    border: 1px solid var(--border-red);
     border-radius: 4px;
 }
 
@@ -142,7 +204,7 @@ h2 {
     padding: 12px 24px;
     background-color: var(--input-bg);
     color: var(--text-color);
-    border: 1px solid var(--border-brown);
+    border: 1px solid var(--border-red);
     border-radius: 4px;
     cursor: pointer;
     transition: all 0.3s ease;
@@ -150,12 +212,13 @@ h2 {
 
 .send-button:hover {
     background-color: var(--button-hover);
-    border-color: var(--dark-brown);
+    border-color: var(--dark-red);
 }
 
 .dark-select:focus,
-.chat-input:focus {
+.chat-input:focus,
+.dark-input:focus {
     outline: none;
-    border-color: var(--dark-brown);
-    box-shadow: 0 0 5px rgba(61, 51, 46, 0.5);
+    border-color: var(--accent-red);
+    box-shadow: 0 0 5px rgba(139, 0, 0, 0.5);
 }
