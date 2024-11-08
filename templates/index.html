@@ -37,7 +37,7 @@
                             <button type="button" class="chunk-btn" data-chunk-type="sentence">
                                 문장 단위
                             </button>
-                            <button type="button" class="chunk-btn" data-chunk-type="recommended">
+                            <button type="button" class="chunk-btn" data-chunk-type="token">
                                 512 토큰
                             </button>
                             <div class="custom-chunk">
@@ -191,7 +191,7 @@
             if (activeButton) {
                 return activeButton.dataset.chunkType;
             }
-            return 'token';
+            return 'token'; 
         }
         
         function getChunkSize() {

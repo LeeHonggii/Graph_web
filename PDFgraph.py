@@ -107,12 +107,13 @@ def chunk_by_sentence(metadata: dict) -> dict:
         }
     
     return updated_metadata
-
 def chunk_by_token(metadata: dict, chunk_size: int) -> dict:
     """토큰 단위로 청크 분할"""
     import tiktoken
     
     enc = tiktoken.get_encoding("cl100k_base")
+    updated_metadata = {'pages': metadata['pages'], 'metadata': {}}
+    chunk_id = 0
     
     for page_num, page_data in metadata['metadata'].items():
         content = page_data['content']
@@ -123,13 +124,22 @@ def chunk_by_token(metadata: dict, chunk_size: int) -> dict:
         for i in range(0, len(tokens), chunk_size):
             chunk_tokens = tokens[i:i + chunk_size]
             chunk_text = enc.decode(chunk_tokens)
-            if chunk_text.strip():
-                chunks.append(chunk_text.strip())
+            
+            if chunk_text.strip():  # 빈 청크 제외
+                chunk_info = {
+                    'chunk_id': f'chunk_{chunk_id}',
+                    'content': chunk_text.strip(),
+                    'page': page_num
+                }
+                chunks.append(chunk_info)
+                chunk_id += 1
         
-        page_data['chunks'] = chunks
+        updated_metadata['metadata'][page_num] = {
+            'content': content,
+            'chunks': chunks
+        }
     
-    return metadata
-
+    return updated_metadata
 # 임베딩 함수들
 def embed_with_openai(metadata: dict) -> list:
     """OpenAI 임베딩"""
