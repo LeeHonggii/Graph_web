@@ -170,26 +170,38 @@ def embed_with_openai(metadata: dict) -> list:
 def embed_with_sentence_transformer(metadata: dict) -> list:
     """SentenceTransformer 임베딩"""
     from sentence_transformers import SentenceTransformer
+    import numpy as np
     
+    # 모델 로딩 (전역 변수로 만들거나 캐싱하면 더 효율적)
     model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
     all_embeddings = []
     all_texts = []
-    page_info = []  # 페이지 정보 추적
+    page_info = []
     
+    # 모든 페이지의 청크들을 처리
     for page_num, page_data in metadata['metadata'].items():
-        for chunk_idx, chunk in enumerate(page_data['chunks']):
+        for chunk in page_data['chunks']:
             try:
-                embedding = model.encode(chunk)
-                all_embeddings.append(embedding.tolist())
-                all_texts.append(chunk)
-                page_info.append({'page': page_num, 'chunk': chunk_idx})
+                # 임베딩 생성
+                embedding = model.encode(chunk['content'], convert_to_tensor=False)
+                
+                # NumPy 배열을 리스트로 변환
+                embedding_list = embedding.tolist()
+                
+                all_embeddings.append(embedding_list)
+                all_texts.append(chunk['content'])
+                page_info.append({'page': chunk['page'], 'chunk_id': chunk['chunk_id']})
+                
             except Exception as e:
-                print(f"Error on {page_num}, chunk {chunk_idx}: {str(e)}")
+                print(f"Error creating embedding for chunk {chunk['chunk_id']}: {str(e)}")
                 continue
     
+    if not all_embeddings:
+        raise ValueError("No embeddings were created successfully")
+        
     return all_embeddings, all_texts, page_info
 
-def store_in_chroma(embeddings: list, texts: list, page_info: list) -> dict:
+def store_in_chroma(embeddings: list, texts: list, page_info: list, embedding_type: str = "openai") -> dict:
     """Chroma에 벡터 저장"""
     import chromadb
     import os
@@ -202,8 +214,8 @@ def store_in_chroma(embeddings: list, texts: list, page_info: list) -> dict:
     # Chroma 클라이언트 초기화
     chroma_client = chromadb.PersistentClient(path=persist_directory)
     
-    # 컬렉션 생성
-    collection_name = "pdf_documents"
+    # 컬렉션 생성 (임베딩 타입에 따른 구분)
+    collection_name = f"pdf_documents_{embedding_type}"
     try:
         chroma_client.delete_collection(collection_name)
     except:
@@ -214,8 +226,8 @@ def store_in_chroma(embeddings: list, texts: list, page_info: list) -> dict:
     # 데이터 저장
     collection.add(
         embeddings=embeddings,
-        documents=texts,  # 텍스트 리스트
-        metadatas=page_info,  # 메타데이터 (페이지 정보와 청크 ID)
+        documents=texts,
+        metadatas=page_info,
         ids=[info['chunk_id'] for info in page_info]
     )
     
@@ -224,7 +236,6 @@ def store_in_chroma(embeddings: list, texts: list, page_info: list) -> dict:
         "collection_name": collection_name,
         "total_chunks": len(texts)
     }
-
 def store_in_pinecone(embeddings: List[float], texts: List[str]) -> any:
     """Pinecone에 벡터 저장"""
     # Pinecone 저장 구현
@@ -278,10 +289,12 @@ def create_rag_pipeline(config: Dict[str, str]) -> Graph:
         }
     
     def store_vectors_node(state: dict) -> dict[str, Any]:
+        embedding_type = 'openai' if config['embedding_module'] == 'openai' else 'sentence-transformer'
         result = store_in_chroma(
             state["embeddings"],
             state["texts"],
-            state["page_info"]
+            state["page_info"],
+            embedding_type=embedding_type  # 임베딩 타입 전달
         )
         return {"vector_store": result}
 

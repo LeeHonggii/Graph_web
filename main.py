@@ -87,27 +87,33 @@ async def process_pdf(
                 "message": str(e)
             }
         )
-def search_in_chroma(query: str, n_results: int = 3):
+def search_in_chroma(query: str, n_results: int = 3, embedding_type: str = "openai"):
     """Chroma DB에서 검색"""
     import chromadb
     import os
-    from openai import OpenAI
     
     # Chroma 클라이언트 초기화
     persist_directory = os.path.join(os.getcwd(), "db")
     client = chromadb.PersistentClient(path=persist_directory)
     
     try:
-        # 컬렉션 가져오기
-        collection = client.get_collection("pdf_documents")
+        # 컬렉션 가져오기 (임베딩 타입에 따른 구분)
+        collection_name = f"pdf_documents_{embedding_type}"
+        collection = client.get_collection(collection_name)
         
-        # 쿼리 임베딩 생성
-        openai_client = OpenAI()
-        query_response = openai_client.embeddings.create(
-            model="text-embedding-ada-002",
-            input=query
-        )
-        query_embedding = query_response.data[0].embedding
+        # 임베딩 타입에 따라 다른 처리
+        if embedding_type == "openai":
+            from openai import OpenAI
+            openai_client = OpenAI()
+            query_response = openai_client.embeddings.create(
+                model="text-embedding-ada-002",
+                input=query
+            )
+            query_embedding = query_response.data[0].embedding
+        else:  # sentence-transformer
+            from sentence_transformers import SentenceTransformer
+            model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+            query_embedding = model.encode(query, convert_to_tensor=False).tolist()
         
         # 검색 실행
         results = collection.query(
@@ -129,12 +135,17 @@ def search_in_chroma(query: str, n_results: int = 3):
     except Exception as e:
         print(f"Search error: {str(e)}")
         return []
+        
+    except Exception as e:
+        print(f"Search error: {str(e)}")
+        return []
     
 @app.post("/chat")
 async def chat(request: Request):
     try:
         data = await request.json()
         query = data.get('message', '')
+        embedding_type = data.get('embedding_type', 'openai')  # 기본값은 openai
         
         if not query:
             return JSONResponse(content={
@@ -142,8 +153,8 @@ async def chat(request: Request):
                 "message": "Query is empty"
             })
         
-        # Chroma DB에서 관련 내용 검색
-        search_results = search_in_chroma(query)
+        # embedding_type 전달
+        search_results = search_in_chroma(query, embedding_type=embedding_type)
         
         if not search_results:
             return JSONResponse(content={
@@ -151,7 +162,6 @@ async def chat(request: Request):
                 "message": "죄송합니다. 관련된 내용을 찾을 수 없습니다."
             })
         
-        # 검색 결과 포맷팅
         context_texts = [f"페이지 {result['metadata']['page']}: {result['text']}" 
                         for result in search_results]
         
@@ -163,6 +173,7 @@ async def chat(request: Request):
         })
         
     except Exception as e:
+        print(f"Chat error: {str(e)}")
         return JSONResponse(
             status_code=500,
             content={
