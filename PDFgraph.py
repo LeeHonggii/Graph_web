@@ -201,41 +201,59 @@ def embed_with_sentence_transformer(metadata: dict) -> list:
         
     return all_embeddings, all_texts, page_info
 
-def store_in_chroma(embeddings: list, texts: list, page_info: list, embedding_type: str = "openai") -> dict:
+def store_in_chroma(embeddings: list, texts: list, page_info: list, embedding_type: str = "openai", file_info: dict = None) -> dict:
     """Chroma에 벡터 저장"""
     import chromadb
     import os
+    from datetime import datetime
     
     # Chroma 설정
     persist_directory = os.path.join(os.getcwd(), "db")
     if not os.path.exists(persist_directory):
         os.makedirs(persist_directory)
     
+    # 파일 이름 처리
+    file_name = os.path.splitext(file_info.get("file_name", "unknown"))[0]
+    file_name = ''.join(c if c.isalnum() else '_' for c in file_name)
+    
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    pdf_module = file_info.get("pdf_module", "unknown")
+    chunk_type = file_info.get("chunk_type", "unknown")
+    
+    # chunk_size 처리
+    chunk_size = "word" if chunk_type == "sentence" else str(file_info.get("chunk_size", "unknown"))
+    
+    # embedding_type 단순화
+    embedding_type = "sbert" if embedding_type == "sentence-transformer" else "openai"
+    
+    collection_name = f"vec_{timestamp}_{file_name}_{pdf_module}_{chunk_type}_{chunk_size}_{embedding_type}"
+
+    print(f"Creating collection: {collection_name}")
+    
     # Chroma 클라이언트 초기화
     chroma_client = chromadb.PersistentClient(path=persist_directory)
     
-    # 컬렉션 생성 (임베딩 타입에 따른 구분)
-    collection_name = f"pdf_documents_{embedding_type}"
     try:
-        chroma_client.delete_collection(collection_name)
-    except:
-        pass
+        # 컬렉션 생성
+        collection = chroma_client.create_collection(name=collection_name)
+        
+        # 데이터 저장
+        collection.add(
+            embeddings=embeddings,
+            documents=texts,
+            metadatas=page_info,
+            ids=[info['chunk_id'] for info in page_info]
+        )
+        
+        return {
+            "status": "stored in chroma",
+            "collection_name": collection_name,
+            "total_chunks": len(texts)
+        }
     
-    collection = chroma_client.create_collection(name=collection_name)
-    
-    # 데이터 저장
-    collection.add(
-        embeddings=embeddings,
-        documents=texts,
-        metadatas=page_info,
-        ids=[info['chunk_id'] for info in page_info]
-    )
-    
-    return {
-        "status": "stored in chroma",
-        "collection_name": collection_name,
-        "total_chunks": len(texts)
-    }
+    except Exception as e:
+        print(f"Error storing in Chroma: {str(e)}")
+        raise e
 def store_in_pinecone(embeddings: List[float], texts: List[str]) -> any:
     """Pinecone에 벡터 저장"""
     # Pinecone 저장 구현
@@ -290,11 +308,14 @@ def create_rag_pipeline(config: Dict[str, str]) -> Graph:
     
     def store_vectors_node(state: dict) -> dict[str, Any]:
         embedding_type = 'openai' if config['embedding_module'] == 'openai' else 'sentence-transformer'
+        file_info = config.get('file_info', {})  # file_info 가져오기
+        
         result = store_in_chroma(
             state["embeddings"],
             state["texts"],
             state["page_info"],
-            embedding_type=embedding_type  # 임베딩 타입 전달
+            embedding_type=embedding_type,
+            file_info=file_info
         )
         return {"vector_store": result}
 
@@ -317,3 +338,142 @@ def create_rag_pipeline(config: Dict[str, str]) -> Graph:
     workflow.add_edge("store_vectors", END)
     
     return workflow.compile()
+
+def load_existing_vectors(collection_name: str) -> Dict:
+    """저장된 벡터 컬렉션 로드"""
+    import chromadb
+    import os
+    
+    try:
+        # Chroma 클라이언트 초기화
+        persist_directory = os.path.join(os.getcwd(), "db")
+        if not os.path.exists(persist_directory):
+            print(f"Database directory not found: {persist_directory}")
+            return None
+            
+        client = chromadb.PersistentClient(path=persist_directory)
+        
+        # 컬렉션 존재 여부 확인
+        collections = client.list_collections()
+        if not any(collection.name == collection_name for collection in collections):
+            print(f"Collection not found: {collection_name}")
+            return None
+            
+        # 기존 컬렉션 불러오기
+        collection = client.get_collection(collection_name)
+        
+        # 전체 데이터 가져오기
+        count = collection.count()
+        if count == 0:
+            print(f"Collection is empty: {collection_name}")
+            return None
+            
+        results = collection.get()
+        
+        if not results or "embeddings" not in results:
+            print(f"Invalid results format for collection: {collection_name}")
+            return None
+            
+        return {
+            "embeddings": results["embeddings"],
+            "documents": results["documents"],
+            "metadatas": results["metadatas"],
+            "ids": results["ids"],
+            "collection_name": collection_name,
+            "vector_count": count
+        }
+        
+    except Exception as e:
+        print(f"Error in load_existing_vectors: {str(e)}")
+        return None
+
+
+
+def get_available_collections() -> List[Dict]:
+    """사용 가능한 벡터 컬렉션 목록 조회"""
+    import chromadb
+    import os
+    from datetime import datetime
+    
+    persist_directory = os.path.join(os.getcwd(), "db")
+    client = chromadb.PersistentClient(path=persist_directory)
+    
+    collections = []
+    try:
+        for collection in client.list_collections():
+            try:
+                collection_data = client.get_collection(collection.name)
+                name_parts = collection.name.split('_')
+                
+                if len(name_parts) >= 7 and name_parts[0] == "vec":
+                    collection_info = {
+                        "name": collection.name,
+                        "vector_count": collection_data.count(),
+                        "date": datetime.strptime(name_parts[1], "%Y%m%d%H%M%S").strftime("%Y-%m-%d %H:%M:%S"),
+                        "file_name": name_parts[2] + ".pdf",
+                        "pdf_module": name_parts[3],
+                        "chunk_type": name_parts[4],
+                        "chunk_size": name_parts[5],
+                        "embedding_type": name_parts[6]  # 변환하지 않고 그대로 표시
+                    }
+                    collections.append(collection_info)
+                
+            except Exception as e:
+                print(f"Error getting collection info for {collection.name}: {str(e)}")
+                continue
+                
+        return sorted(collections, key=lambda x: x['date'], reverse=True)
+    except Exception as e:
+        print(f"Error getting collections: {str(e)}")
+        return []
+
+def reuse_vectors_for_search(collection_name: str, query: str, n_results: int = 3) -> List[Dict]:
+    """저장된 벡터를 사용하여 검색"""
+    import chromadb
+    import os
+    
+    # Chroma 클라이언트 초기화
+    persist_directory = os.path.join(os.getcwd(), "db")
+    client = chromadb.PersistentClient(path=persist_directory)
+    
+    try:
+        # 컬렉션 가져오기
+        collection = client.get_collection(collection_name)
+        
+        # 임베딩 타입 확인 (컬렉션 이름에서 추출)
+        embedding_type = "openai" if "openai" in collection_name else "sentence-transformer"
+        
+        # 쿼리 임베딩 생성
+        if embedding_type == "openai":
+            from openai import OpenAI
+            openai_client = OpenAI()
+            response = openai_client.embeddings.create(
+                model="text-embedding-ada-002",
+                input=query
+            )
+            query_embedding = response.data[0].embedding
+        else:
+            from sentence_transformers import SentenceTransformer
+            model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+            query_embedding = model.encode(query, convert_to_tensor=False).tolist()
+        
+        # 검색 실행
+        results = collection.query(
+            query_embeddings=[query_embedding],
+            n_results=n_results
+        )
+        
+        # 결과 정리
+        search_results = []
+        for i in range(len(results['documents'][0])):
+            search_results.append({
+                'text': results['documents'][0][i],
+                'metadata': results['metadatas'][0][i],
+                'distance': results['distances'][0][i] if 'distances' in results else None
+            })
+        
+        return search_results
+        
+    except Exception as e:
+        print(f"Error searching vectors: {str(e)}")
+        return []

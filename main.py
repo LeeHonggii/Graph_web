@@ -3,10 +3,12 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List, Dict
 import json
 import PDFgraph
 from langchain_core.messages import HumanMessage
+import chromadb
+import os
 
 app = FastAPI()
 
@@ -20,6 +22,9 @@ class ProcessingConfig(BaseModel):
     chunk_size: Optional[int] = None
     embedding_module: str
     vector_module: str
+
+class VectorLoadConfig(BaseModel):
+    collection_name: str
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
@@ -41,13 +46,23 @@ async def process_pdf(
         content = await file.read()
         content_base64 = base64.b64encode(content).decode('utf-8')
         
+        # 파일 정보 생성
+        file_info = {
+            "file_name": file.filename,
+            "pdf_module": config_obj.pdf_module,
+            "chunk_type": config_obj.chunk_type,
+            "chunk_size": config_obj.chunk_size,
+            "embedding_module": config_obj.embedding_module
+        }
+        
         # 파이프라인 설정
         pipeline_config = {
             'pdf_module': config_obj.pdf_module,
             'chunk_type': config_obj.chunk_type,
             'chunk_size': config_obj.chunk_size,
             'embedding_module': config_obj.embedding_module,
-            'vector_module': config_obj.vector_module
+            'vector_module': config_obj.vector_module,
+            'file_info': file_info  # 파일 정보 추가
         }
         
         # RAG 파이프라인 생성
@@ -135,17 +150,13 @@ def search_in_chroma(query: str, n_results: int = 3, embedding_type: str = "open
     except Exception as e:
         print(f"Search error: {str(e)}")
         return []
-        
-    except Exception as e:
-        print(f"Search error: {str(e)}")
-        return []
-    
+
 @app.post("/chat")
 async def chat(request: Request):
     try:
         data = await request.json()
         query = data.get('message', '')
-        embedding_type = data.get('embedding_type', 'openai')  # 기본값은 openai
+        embedding_type = data.get('embedding_type', 'openai')
         
         if not query:
             return JSONResponse(content={
@@ -153,7 +164,6 @@ async def chat(request: Request):
                 "message": "Query is empty"
             })
         
-        # embedding_type 전달
         search_results = search_in_chroma(query, embedding_type=embedding_type)
         
         if not search_results:
@@ -181,7 +191,73 @@ async def chat(request: Request):
                 "message": str(e)
             }
         )
+
+@app.get("/available-vectors")
+async def get_available_vectors():
+    """사용 가능한 벡터 컬렉션 목록 조회"""
+    try:
+        collections = PDFgraph.get_available_collections()
+        print(f"Available collections: {collections}")  # 디버깅용 출력
+        
+        return JSONResponse(content={
+            "status": "success",
+            "collections": collections
+        })
     
+    except Exception as e:
+        print(f"Error in get_available_vectors: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": str(e)
+            }
+        )
+
+@app.post("/load-vectors")
+async def load_vectors(request: Request):
+    try:
+        data = await request.json()
+        collection_name = data.get("collection_name")
+        
+        if not collection_name:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "message": "Collection name is required"
+                }
+            )
+
+        # 벡터 데이터 로드
+        vector_data = PDFgraph.load_existing_vectors(collection_name)
+        
+        if vector_data is None:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "status": "error",
+                    "message": f"Collection '{collection_name}' not found or empty"
+                }
+            )
+
+        return JSONResponse(content={
+            "status": "success",
+            "message": "Vectors loaded successfully",
+            "vector_count": vector_data["vector_count"],
+            "collection_name": collection_name
+        })
+            
+    except Exception as e:
+        print(f"Error in load_vectors endpoint: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"Failed to load vectors: {str(e)}"
+            }
+        )
+
 @app.get("/available-modules")
 async def get_available_modules():
     return {

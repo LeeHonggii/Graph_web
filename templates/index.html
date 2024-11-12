@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="ko">
-<!-- head 부분은 동일 -->
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,6 +11,20 @@
         <div class="left-panel">
             <h2>RAG Graph WEB</h2>
             <div class="processing-options">
+                
+                <!-- 처리 방식 선택을 맨 위로 이동 -->
+                <div class="option-group">
+                    <label>처리 방식 선택</label>
+                    <div class="process-buttons">
+                        <button type="button" class="process-btn active" data-process-type="new">
+                            새 PDF 분석
+                        </button>
+                        <button type="button" class="process-btn" data-process-type="load">
+                            벡터 로드
+                        </button>
+                    </div>
+                </div>
+
                 <!-- PDF 처리 모듈 선택 -->
                 <div class="option-group">
                     <label for="pdfProcessingModule">PDF 처리 모듈</label>
@@ -65,12 +78,22 @@
                 </div>
 
                 <!-- PDF 파일 업로드 -->
-                <div class="option-group">
+                <div class="option-group pdf-upload">
                     <label for="pdfFile">PDF 파일 선택</label>
                     <input type="file" id="pdfFile" class="dark-select" accept=".pdf">
                 </div>
 
-                <button id="confirmBtn" class="dark-button">분석 시작</button>
+                <!-- 벡터 로드 옵션 (초기에는 숨김) -->
+                <div id="vectorLoadOptions" style="display: none;">
+                    <div class="option-group">
+                        <label for="vectorCollection">저장된 벡터 선택</label>
+                        <select id="vectorCollection" class="dark-select">
+                            <option value="">벡터 컬렉션 선택</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button id="confirmBtn" class="dark-button">처리 시작</button>
             </div>
 
             <!-- RAG 옵션 섹션 -->
@@ -112,13 +135,13 @@
                         선택하신 모듈로 PDF를 분석하겠습니다. 각 페이지별 텍스트를 추출하고 문장 단위로 분석합니다...
                     </div>
                 </div>
-                <div class="chat-input-container">
-                    <input type="text" id="chatInput" class="chat-input" placeholder="메시지를 입력하세요...">
-                    <button class="send-button">전송</button>
+                    <!-- 다른 요소들 추가 -->
                 </div>
             </div>
         </div>
-    </div>
+    </body>
+    </html>
+
 
     <script>
     document.addEventListener('DOMContentLoaded', function() {
@@ -130,14 +153,38 @@
         const sendButton = document.querySelector('.send-button');
         const ragOptions = document.getElementById('ragOptions');
         const ragConfirmBtn = document.getElementById('ragConfirmBtn');
+        const processButtons = document.querySelectorAll('.process-btn');
+        const pdfUploadDiv = document.querySelector('.pdf-upload');
+        const vectorLoadDiv = document.querySelector('.vector-load');
+        const vectorCollection = document.getElementById('vectorCollection');
         
-        // 임베딩 타입 저장 변수 추가
+        // 임베딩 타입 저장 변수
         let currentEmbeddingType = 'openai';
         
         // 초기에 RAG 옵션 숨기기
         ragOptions.style.display = 'none';
         
-        // 청크 버튼 클릭 처리 (동일)
+        // 처리 방식 버튼 클릭 처리
+        processButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                processButtons.forEach(btn => btn.classList.remove('active'));
+                this.classList.add('active');
+                
+                const processType = this.dataset.processType;
+                const newPdfOptions = document.getElementById('newPdfOptions');
+                const vectorLoadOptions = document.getElementById('vectorLoadOptions');
+                
+                if (processType === 'new') {
+                    newPdfOptions.style.display = 'block';
+                    vectorLoadOptions.style.display = 'none';
+                } else {
+                    newPdfOptions.style.display = 'none';
+                    vectorLoadOptions.style.display = 'block';
+                    loadAvailableVectors();
+                }
+            });
+        });
+        // 청크 버튼 클릭 처리
         chunkButtons.forEach(button => {
             button.addEventListener('click', function() {
                 chunkButtons.forEach(btn => btn.classList.remove('active'));
@@ -146,21 +193,43 @@
             });
         });
         
-        // 사용자 정의 입력 처리 (동일)
+        // 사용자 정의 입력 처리
         customChunkInput.addEventListener('input', function() {
             chunkButtons.forEach(btn => btn.classList.remove('active'));
         });
         
-        // PDF 처리 함수 수정
+        // 저장된 벡터 목록 로드
+        // 저장된 벡터 목록 로드 함수 수정
+        async function loadAvailableVectors() {
+            try {
+                const response = await fetch('/available-vectors');
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    vectorCollection.innerHTML = '<option value="">벡터 컬렉션 선택</option>';
+                    result.collections.forEach(collection => {
+                        const option = document.createElement('option');
+                        option.value = collection.name;
+                        option.textContent = `${collection.file_name} (${collection.date})
+                            - ${collection.pdf_module}, ${collection.chunk_type}
+                            - ${collection.embedding_type}, ${collection.vector_count} vectors`;
+                        vectorCollection.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('벡터 목록 로드 실패:', error);
+            }
+        }
+                
+        // PDF 처리 함수
         async function processPDF() {
             const pdfFile = document.getElementById('pdfFile').files[0];
             if (!pdfFile) {
                 alert('PDF 파일을 선택해주세요.');
-                return;
+                return false;
             }
             
             const embeddingModule = document.getElementById('embeddingModule').value;
-            // 임베딩 타입 저장
             currentEmbeddingType = embeddingModule === 'openai' ? 'openai' : 'sentence-transformer';
             
             const config = {
@@ -188,7 +257,6 @@
                         - 생성된 청크 수: ${result.result.chunks_count}\n
                         - 생성된 임베딩 수: ${result.result.embeddings_count}\n
                         - 벡터 저장소 상태: ${result.result.vector_store_status}`);
-                    ragOptions.style.display = 'block';
                     return true;
                 } else {
                     addMessageToChat('assistant', `오류 발생: ${result.message}`);
@@ -200,7 +268,52 @@
             }
         }
         
-        // 채팅 전송 함수 수정
+        // 벡터 로드 함수
+        async function loadVectors() {
+            const selectedCollection = vectorCollection.value;
+            if (!selectedCollection) {
+                alert('벡터 컬렉션을 선택해주세요.');
+                return false;
+            }
+            
+            try {
+                const response = await fetch('/load-vectors', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ collection_name: selectedCollection })
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    addMessageToChat('assistant', `벡터 로드 완료:\n
+                        - 로드된 벡터 수: ${result.vector_count}\n
+                        - 컬렉션 이름: ${selectedCollection}`);
+                    return true;
+                } else {
+                    addMessageToChat('assistant', `오류 발생: ${result.message}`);
+                    return false;
+                }
+            } catch (error) {
+                addMessageToChat('assistant', `처리 중 오류가 발생했습니다: ${error.message}`);
+                return false;
+            }
+        }
+        
+        // 처리 시작 함수
+        async function startProcessing() {
+            const processType = document.querySelector('.process-btn.active').dataset.processType;
+            
+            if (processType === 'new') {
+                return processPDF();
+            } else {
+                return loadVectors();
+            }
+        }
+        
+        // 채팅 전송 함수
         async function sendMessage() {
             const message = chatInput.value.trim();
             if (!message) return;
@@ -216,7 +329,7 @@
                     },
                     body: JSON.stringify({ 
                         message: message,
-                        embedding_type: currentEmbeddingType  // 임베딩 타입 추가
+                        embedding_type: currentEmbeddingType
                     })
                 });
                 
@@ -233,7 +346,7 @@
             }
         }
         
-        // RAG 설정 함수 (동일)
+        // RAG 설정 함수
         async function configureRAG() {
             const ragConfig = {
                 model: document.getElementById('ragModel').value,
@@ -262,7 +375,7 @@
             }
         }
         
-        // 유틸리티 함수들 (동일)
+        // 유틸리티 함수들
         function getSelectedChunkType() {
             const activeButton = document.querySelector('.chunk-btn.active');
             if (activeButton) {
@@ -288,12 +401,12 @@
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
         
-        // 이벤트 리스너 설정 (동일)
+        // 이벤트 리스너 설정
         confirmBtn.addEventListener('click', async () => {
-            const success = await processPDF();
+            const success = await startProcessing();
             if (success) {
                 ragOptions.style.display = 'block';
-                addMessageToChat('assistant', 'PDF 분석이 완료되었습니다. RAG 옵션을 설정해주세요.');
+                addMessageToChat('assistant', '처리가 완료되었습니다. RAG 옵션을 설정해주세요.');
             }
         });
 
