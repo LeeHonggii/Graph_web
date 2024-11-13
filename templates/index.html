@@ -11,10 +11,9 @@
         <div class="left-panel">
             <h2>RAG Graph WEB</h2>
             <div class="processing-options">
-                
-                <!-- 처리 방식 선택을 맨 위로 이동 -->
+                <!-- 처리 방식 선택 -->
                 <div class="option-group">
-                    <label>처리 방식 선택</label>
+                    <label>처리 방식</label>
                     <div class="process-buttons">
                         <button type="button" class="process-btn active" data-process-type="new">
                             새 PDF 분석
@@ -25,35 +24,38 @@
                     </div>
                 </div>
 
-                <!-- PDF 처리 모듈 선택 -->
-                <div class="option-group">
-                    <label for="pdfProcessingModule">PDF 처리 모듈</label>
-                    <select id="pdfProcessingModule" class="dark-select">
-                        <option value="">PDF 처리 모듈 선택</option>
-                        <option value="pdfplumber">PDFPlumber</option>
-                        <option value="pypdf">PyPDF2</option>
-                        <option value="pdfminer">PDFMiner</option>
-                    </select>
-                </div>
+                <!-- 새 PDF 분석 관련 옵션들 -->
+                <div id="newPdfOptions">
+                    <!-- PDF 처리 모듈 선택 -->
+                    <div class="option-group">
+                        <label for="pdfProcessingModule">PDF 처리 모듈</label>
+                        <select id="pdfProcessingModule" class="dark-select">
+                            <option value="">PDF 처리 모듈 선택</option>
+                            <option value="pdfplumber">PDFPlumber</option>
+                            <option value="pypdf">PyPDF2</option>
+                            <option value="pdfminer">PDFMiner</option>
+                        </select>
+                    </div>
 
-                <!-- 임베딩 모듈 선택 및 청크 사이즈 설정 -->
-                <div class="option-group">
-                    <label for="embeddingModule">임베딩 모듈</label>
-                    <select id="embeddingModule" class="dark-select">
-                        <option value="">임베딩 모듈 선택</option>
-                        <option value="openai">OpenAI</option>
-                        <option value="sentence-transformer">SentenceTransformer</option>
-                    </select>
-                    
-                    <div class="chunk-options">
-                        <label>청크 사이즈 선택</label>
-                        <div class="chunk-buttons">
-                            <button type="button" class="chunk-btn" data-chunk-type="sentence">
-                                문장 단위
-                            </button>
-                            <button type="button" class="chunk-btn" data-chunk-type="token">
-                                512 토큰
-                            </button>
+                    <!-- 임베딩 모듈 선택 및 청크 사이즈 설정 -->
+                    <div class="option-group">
+                        <label for="embeddingModule">임베딩 모듈</label>
+                        <select id="embeddingModule" class="dark-select">
+                            <option value="">임베딩 모듈 선택</option>
+                            <option value="openai">OpenAI</option>
+                            <option value="sentence-transformer">SentenceTransformer</option>
+                        </select>
+                        
+                        <div class="chunk-options">
+                            <label>청크 사이즈 선택</label>
+                            <div class="chunk-buttons">
+                                <button type="button" class="chunk-btn" data-chunk-type="sentence">
+                                    문장 단위
+                                </button>
+                                <button type="button" class="chunk-btn" data-chunk-type="token">
+                                    512 토큰
+                                </button>
+                            </div>
                             <div class="custom-chunk">
                                 <input type="number" 
                                        id="customChunkSize" 
@@ -65,25 +67,25 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- 벡터 저장 모듈 선택 -->
+                    <div class="option-group">
+                        <label for="vectorStorageModule">벡터 저장 모듈</label>
+                        <select id="vectorStorageModule" class="dark-select">
+                            <option value="">벡터 저장 모듈 선택</option>
+                            <option value="chroma">Chroma</option>
+                            <option value="pinecone">Pinecone</option>
+                        </select>
+                    </div>
+
+                    <!-- PDF 파일 업로드 -->
+                    <div class="option-group">
+                        <label for="pdfFile">PDF 파일 선택</label>
+                        <input type="file" id="pdfFile" class="dark-select" accept=".pdf">
+                    </div>
                 </div>
 
-                <!-- 벡터 저장 모듈 선택 -->
-                <div class="option-group">
-                    <label for="vectorStorageModule">벡터 저장 모듈</label>
-                    <select id="vectorStorageModule" class="dark-select">
-                        <option value="">벡터 저장 모듈 선택</option>
-                        <option value="chroma">Chroma</option>
-                        <option value="pinecone">Pinecone</option>
-                    </select>
-                </div>
-
-                <!-- PDF 파일 업로드 -->
-                <div class="option-group pdf-upload">
-                    <label for="pdfFile">PDF 파일 선택</label>
-                    <input type="file" id="pdfFile" class="dark-select" accept=".pdf">
-                </div>
-
-                <!-- 벡터 로드 옵션 (초기에는 숨김) -->
+                <!-- 벡터 로드 옵션 -->
                 <div id="vectorLoadOptions" style="display: none;">
                     <div class="option-group">
                         <label for="vectorCollection">저장된 벡터 선택</label>
@@ -97,7 +99,7 @@
             </div>
 
             <!-- RAG 옵션 섹션 -->
-            <div class="rag-options" id="ragOptions">
+            <div class="rag-options" id="ragOptions" style="display: none;">
                 <h2>RAG 설정</h2>
                 <div class="processing-options">
                     <div class="option-group">
@@ -135,13 +137,13 @@
                         선택하신 모듈로 PDF를 분석하겠습니다. 각 페이지별 텍스트를 추출하고 문장 단위로 분석합니다...
                     </div>
                 </div>
-                    <!-- 다른 요소들 추가 -->
+                <div class="chat-input-container">
+                    <input type="text" id="chatInput" class="chat-input" placeholder="메시지를 입력하세요...">
+                    <button class="send-button">전송</button>
                 </div>
             </div>
         </div>
-    </body>
-    </html>
-
+    </div>
 
     <script>
     document.addEventListener('DOMContentLoaded', function() {
@@ -153,16 +155,14 @@
         const sendButton = document.querySelector('.send-button');
         const ragOptions = document.getElementById('ragOptions');
         const ragConfirmBtn = document.getElementById('ragConfirmBtn');
-        const processButtons = document.querySelectorAll('.process-btn');
-        const pdfUploadDiv = document.querySelector('.pdf-upload');
-        const vectorLoadDiv = document.querySelector('.vector-load');
-        const vectorCollection = document.getElementById('vectorCollection');
         
+        // 처리 방식 관련 변수들
+        const processButtons = document.querySelectorAll('.process-btn');  // 클래스명 수정
+        const newPdfOptions = document.getElementById('newPdfOptions');
+        const vectorLoadOptions = document.getElementById('vectorLoadOptions');
+
         // 임베딩 타입 저장 변수
         let currentEmbeddingType = 'openai';
-        
-        // 초기에 RAG 옵션 숨기기
-        ragOptions.style.display = 'none';
         
         // 처리 방식 버튼 클릭 처리
         processButtons.forEach(button => {
@@ -171,9 +171,6 @@
                 this.classList.add('active');
                 
                 const processType = this.dataset.processType;
-                const newPdfOptions = document.getElementById('newPdfOptions');
-                const vectorLoadOptions = document.getElementById('vectorLoadOptions');
-                
                 if (processType === 'new') {
                     newPdfOptions.style.display = 'block';
                     vectorLoadOptions.style.display = 'none';
@@ -184,10 +181,12 @@
                 }
             });
         });
+        
         // 청크 버튼 클릭 처리
-        chunkButtons.forEach(button => {
+        document.querySelectorAll('.chunk-buttons .chunk-btn').forEach(button => {
             button.addEventListener('click', function() {
-                chunkButtons.forEach(btn => btn.classList.remove('active'));
+                document.querySelectorAll('.chunk-buttons .chunk-btn').forEach(btn => 
+                    btn.classList.remove('active'));
                 this.classList.add('active');
                 customChunkInput.value = '';
             });
@@ -195,11 +194,11 @@
         
         // 사용자 정의 입력 처리
         customChunkInput.addEventListener('input', function() {
-            chunkButtons.forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.chunk-buttons .chunk-btn').forEach(btn => 
+                btn.classList.remove('active'));
         });
         
         // 저장된 벡터 목록 로드
-        // 저장된 벡터 목록 로드 함수 수정
         async function loadAvailableVectors() {
             try {
                 const response = await fetch('/available-vectors');
@@ -305,7 +304,6 @@
         // 처리 시작 함수
         async function startProcessing() {
             const processType = document.querySelector('.process-btn.active').dataset.processType;
-            
             if (processType === 'new') {
                 return processPDF();
             } else {
