@@ -16,6 +16,12 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
+# 전역 변수로 RAG 설정 저장
+rag_config = {
+    "model": None,
+    "retrieval_method": None
+}
+
 class ProcessingConfig(BaseModel):
     pdf_module: str
     chunk_type: str
@@ -25,6 +31,10 @@ class ProcessingConfig(BaseModel):
 
 class VectorLoadConfig(BaseModel):
     collection_name: str
+
+class RAGConfig(BaseModel):
+    model: str
+    retrieval_method: str
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
@@ -102,6 +112,7 @@ async def process_pdf(
                 "message": str(e)
             }
         )
+
 def search_in_chroma(query: str, n_results: int = 3, embedding_type: str = "openai"):
     """Chroma DB에서 검색"""
     import chromadb
@@ -151,6 +162,30 @@ def search_in_chroma(query: str, n_results: int = 3, embedding_type: str = "open
         print(f"Search error: {str(e)}")
         return []
 
+@app.post("/configure-rag")
+async def configure_rag(request: Request):
+    try:
+        data = await request.json()
+        config = RAGConfig(**data)
+        
+        global rag_config
+        rag_config["model"] = config.model
+        rag_config["retrieval_method"] = config.retrieval_method
+        
+        return JSONResponse(content={
+            "status": "success",
+            "message": "RAG configuration updated successfully",
+            "config": rag_config
+        })
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": str(e)
+            }
+        )
+
 @app.post("/chat")
 async def chat(request: Request):
     try:
@@ -162,6 +197,13 @@ async def chat(request: Request):
             return JSONResponse(content={
                 "status": "error",
                 "message": "Query is empty"
+            })
+            
+        # RAG 설정이 되어있는지 확인
+        if not rag_config["model"] or not rag_config["retrieval_method"]:
+            return JSONResponse(content={
+                "status": "error",
+                "message": "RAG configuration is not set. Please configure RAG first."
             })
         
         search_results = search_in_chroma(query, embedding_type=embedding_type)
@@ -175,7 +217,10 @@ async def chat(request: Request):
         context_texts = [f"페이지 {result['metadata']['page']}: {result['text']}" 
                         for result in search_results]
         
-        response_text = f"검색 결과:\n\n" + "\n\n".join(context_texts)
+        # RAG 설정 정보와 함께 응답 생성
+        response_text = f"모델: {rag_config['model']}\n"
+        response_text += f"검색 방식: {rag_config['retrieval_method']}\n\n"
+        response_text += "검색된 문서:\n" + "\n\n".join(context_texts)
         
         return JSONResponse(content={
             "status": "success",
