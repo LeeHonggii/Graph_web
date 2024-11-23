@@ -1,0 +1,14 @@
+fastapi
+python-multipart
+jinja2
+pydantic
+langchain-core
+chromadb
+pdfplumber
+PyPDF2
+pdfminer.six
+tiktoken
+openai
+sentence-transformers
+langgraph
+numpy
