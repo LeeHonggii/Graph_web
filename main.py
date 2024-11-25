@@ -9,6 +9,7 @@ import PDFgraph
 from langchain_core.messages import HumanMessage
 import chromadb
 import os
+from openai import OpenAI
 
 app = FastAPI()
 
@@ -194,49 +195,37 @@ async def chat(request: Request):
         embedding_type = data.get('embedding_type', 'openai')
         
         if not query:
-            return JSONResponse(content={
-                "status": "error",
-                "message": "Query is empty"
-            })
+            return JSONResponse(content={"status": "error", "message": "Query is empty"})
             
-        # RAG 설정이 되어있는지 확인
-        if not rag_config["model"] or not rag_config["retrieval_method"]:
-            return JSONResponse(content={
-                "status": "error",
-                "message": "RAG configuration is not set. Please configure RAG first."
-            })
+        if not rag_config["model"]:
+            return JSONResponse(content={"status": "error", "message": "RAG configuration is not set"})
         
         search_results = search_in_chroma(query, embedding_type=embedding_type)
-        
         if not search_results:
-            return JSONResponse(content={
-                "status": "success",
-                "message": "죄송합니다. 관련된 내용을 찾을 수 없습니다."
-            })
+            return JSONResponse(content={"status": "success", "message": "관련 내용을 찾을 수 없습니다."})
         
-        context_texts = [f"페이지 {result['metadata']['page']}: {result['text']}" 
-                        for result in search_results]
+        context = "\n\n".join([f"페이지 {r['metadata']['page']}: {r['text']}" for r in search_results])
         
-        # RAG 설정 정보와 함께 응답 생성
-        response_text = f"모델: {rag_config['model']}\n"
-        response_text += f"검색 방식: {rag_config['retrieval_method']}\n\n"
-        response_text += "검색된 문서:\n" + "\n\n".join(context_texts)
+        client = OpenAI()
+        completion = client.chat.completions.create(
+            model=rag_config["model"],  # 사용자가 선택한 모델
+            messages=[
+                {"role": "system", "content": f"주어진 문서 내용을 바탕으로 질문에 답변하세요:\n\n{context}"},
+                {"role": "user", "content": query}
+            ]
+        )
         
-        return JSONResponse(content={
-            "status": "success",
-            "message": response_text
-        })
+        ai_response = completion.choices[0].message.content
+        response_text = f"모델: {rag_config['model']}\n검색 방식: {rag_config['retrieval_method']}\n\n"
+        response_text += f"답변:\n{ai_response}\n\n"
+        response_text += "참고 문서:\n" + context
+        
+        return JSONResponse(content={"status": "success", "message": response_text})
         
     except Exception as e:
         print(f"Chat error: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "message": str(e)
-            }
-        )
-
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+    
 @app.get("/available-vectors")
 async def get_available_vectors():
     """사용 가능한 벡터 컬렉션 목록 조회"""
