@@ -10,6 +10,7 @@ from langchain_core.messages import HumanMessage
 import chromadb
 import os
 from openai import OpenAI
+from langsmith import traceable
 
 app = FastAPI()
 
@@ -20,7 +21,8 @@ templates = Jinja2Templates(directory="templates")
 # 전역 변수로 RAG 설정 저장
 rag_config = {
     "model": None,
-    "retrieval_method": None
+    "retrieval_method": None,
+    "is_configured": False
 }
 
 class ProcessingConfig(BaseModel):
@@ -163,68 +165,75 @@ def search_in_chroma(query: str, n_results: int = 3, embedding_type: str = "open
         print(f"Search error: {str(e)}")
         return []
 
-@app.post("/configure-rag")
-async def configure_rag(request: Request):
-    try:
-        data = await request.json()
-        config = RAGConfig(**data)
-        
-        global rag_config
-        rag_config["model"] = config.model
-        rag_config["retrieval_method"] = config.retrieval_method
-        
-        return JSONResponse(content={
-            "status": "success",
-            "message": "RAG configuration updated successfully",
-            "config": rag_config
-        })
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "message": str(e)
-            }
-        )
-
 @app.post("/chat")
 async def chat(request: Request):
-    try:
-        data = await request.json()
-        query = data.get('message', '')
-        embedding_type = data.get('embedding_type', 'openai')
-        
-        if not query:
-            return JSONResponse(content={"status": "error", "message": "Query is empty"})
-            
-        if not rag_config["model"]:
-            return JSONResponse(content={"status": "error", "message": "RAG configuration is not set"})
-        
-        search_results = search_in_chroma(query, embedding_type=embedding_type)
-        if not search_results:
-            return JSONResponse(content={"status": "success", "message": "관련 내용을 찾을 수 없습니다."})
-        
-        context = "\n\n".join([f"페이지 {r['metadata']['page']}: {r['text']}" for r in search_results])
-        
-        client = OpenAI()
-        completion = client.chat.completions.create(
-            model=rag_config["model"],  # 사용자가 선택한 모델
-            messages=[
-                {"role": "system", "content": f"주어진 문서 내용을 바탕으로 질문에 답변하세요:\n\n{context}"},
-                {"role": "user", "content": query}
-            ]
-        )
-        
-        ai_response = completion.choices[0].message.content
-        response_text = f"모델: {rag_config['model']}\n검색 방식: {rag_config['retrieval_method']}\n\n"
-        response_text += f"답변:\n{ai_response}\n\n"
-        response_text += "참고 문서:\n" + context
-        
-        return JSONResponse(content={"status": "success", "message": response_text})
-        
-    except Exception as e:
-        print(f"Chat error: {str(e)}")
-        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+  try:
+      data = await request.json()
+      query = data.get('message', '')
+      embedding_type = data.get('embedding_type', 'openai')
+      
+      if not query:
+          return JSONResponse(content={"status": "error", "message": "Query is empty"})
+      
+      search_results = search_in_chroma(query, embedding_type=embedding_type)
+      if not search_results:
+          return JSONResponse(content={"status": "success", "message": "관련 내용을 찾을 수 없습니다."})
+      
+      context = "\n\n".join([f"페이지 {r['metadata']['page']}: {r['text']}" for r in search_results])
+      
+      if not rag_config["is_configured"]:
+          return JSONResponse(content={"status": "success", "message": "검색 결과:\n" + context})
+
+      model_name = rag_config["model"]
+      print(model_name)
+      
+      client = OpenAI()
+      print("System prompt:", f"문서 내용을 바탕으로 답변해주세요:\n\n{context}")
+      completion = client.chat.completions.create(
+          model=model_name,
+          messages=[
+              {"role": "system", "content": f"문서 내용을 바탕으로 답변해주세요:\n\n{context}"},
+              {"role": "user", "content": query}
+          ]
+      )
+      
+      ai_response = completion.choices[0].message.content
+      response_text = f"모델: {rag_config['model']}\n검색 방식: {rag_config['retrieval_method']}\n\n"
+      response_text += f"답변:\n{ai_response}\n\n"
+      response_text += "참고 문서:\n" + context
+      
+      return JSONResponse(content={"status": "success", "message": response_text})
+      
+  except Exception as e:
+      print(f"Chat error: {str(e)}")
+      return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+@app.post("/configure-rag")
+async def configure_rag(request: Request):
+   try:
+       data = await request.json()
+       config = RAGConfig(**data)
+       
+       global rag_config
+       rag_config.update({
+           "model": config.model,
+           "retrieval_method": config.retrieval_method,
+           "is_configured": True  
+       })
+       
+       return JSONResponse(content={
+           "status": "success",
+           "message": "RAG configuration updated successfully",
+           "config": rag_config
+       })
+   except Exception as e:
+       return JSONResponse(
+           status_code=500, 
+           content={
+               "status": "error", 
+               "message": str(e)
+           }
+       )
     
 @app.get("/available-vectors")
 async def get_available_vectors():
